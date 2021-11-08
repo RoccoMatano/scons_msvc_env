@@ -124,7 +124,7 @@ class Arch(enum.Enum):
 
 globals().update(Ver.__members__)
 globals().update(Arch.__members__)
-DEFAULT_VER  = VC16
+DEFAULT_VER  = VC17
 DEFAULT_ARCH = X64
 
 THIS_DIR = pathlib.Path(__file__).parent.resolve()
