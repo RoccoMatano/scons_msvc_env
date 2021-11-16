@@ -63,24 +63,21 @@ import SCons
 # attribute of the same name. So we have to use 'SConscript' in an import
 # statement to get hold of the sub-module.
 from SCons.Script.SConscript import SConsEnvironment
+import SCons.Defaults
 from implib_from_dll import lib_from_dll
 
 ################################################################################
 
-# There are several ways of inhibiting MSVC detection: One is to set
-# 'MSVC_SETUP_RUN' to True in kwargs of the Environtment() call - as we do it
-# below. The other one is to hack several references to msvc_setup_env_once().
-# We do this here because it saves even a little more time.
+# We are going to inhibit the detection of MSVC during the creation of our
+# MSVC env (see MSVC_SETUP_RUN below). But on Windows SCons still thinks, MSVC
+# should be part of the default env. When the default env singleton is created
+# this costs unnecessary time for MSVC detection and can trigger SCons warnings
+# if MSVC is not found. Therefore we are now explicitly creating the default
+# env singleton without requesting the MSVC tools. More precisely: requesting no
+# tools at all (tools=[]). Of course this only works, if the default env has not
+# yet been created by someone else.
 
-_inhibit_detection = lambda env: None
-try:
-    SCons.Tool.msvc.msvc_setup_env_once = _inhibit_detection
-    SCons.Tool.msvs.msvc_setup_env_once = _inhibit_detection
-    SCons.Tool.mslib.msvc_setup_env_once = _inhibit_detection
-    SCons.Tool.mslink.msvc_setup_env_once = _inhibit_detection
-except AttributeError:
-    pass
-del _inhibit_detection
+SCons.Defaults.DefaultEnvironment(tools=[])
 
 ################################################################################
 
@@ -148,7 +145,8 @@ class BuildCfg:
     defines: dict = dataclasses.field(default_factory=dict)
 
     def copy(self):
-        return copy.copy(self)
+        # since 'defines' is a container, we have to do a deep copy
+        return copy.deepcopy(self)
 
 ################################################################################
 
@@ -181,13 +179,19 @@ def _setup_tool_env(ver, arch):
         stdout=subprocess.PIPE
         ).stdout
     env = {}
+    keep = (
+        "INCLUDE",
+        "LIB",
+        "PATH",
+        "VCINSTALLDIR",
+        "_NT_SYMBOL_PATH",  # need _NT_SYMBOL_PATH for ImpLibFromSystemDll
+        )
     for line in reversed(out.splitlines()):
         idx = line.find("=")
         if idx < 0:
             break
         name = line[:idx].upper()
-        # need _NT_SYMBOL_PATH for ImpLibFromSystemDll
-        if name in ("INCLUDE", "LIB", "PATH", "_NT_SYMBOL_PATH"):
+        if name in keep:
             value = line[idx + 1:]
             logging.info(f"{name}={value}")
             env[name] = value
