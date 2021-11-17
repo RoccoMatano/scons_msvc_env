@@ -25,9 +25,8 @@
 import sys
 import os
 import re
-import struct
+import ctypes
 import pathlib
-import collections
 
 ################################################################################
 #
@@ -91,91 +90,91 @@ rx_fastcall = re.compile(r"^@[_a-zA-Z][_a-zA-Z0-9]+(@\d+)$")
 
 ################################################################################
 
+class SerializableStruct(ctypes.Structure):
+    "Extending ctypes.Structure for easy serialising and deserialising"
+
+    ############################################################################
+
+    def from_bytes(self, src):
+        ctypes.memmove(ctypes.byref(self), bytes(src), ctypes.sizeof(self))
+
+    ############################################################################
+
+    def __init__(self, *args, **kwargs):
+        if not kwargs:
+            # init fields from positional arguments
+            super().__init__(*args)
+        elif args:
+            raise RuntimeError("use either positional or named arguments")
+        else:
+            # init structure from serialized byte stream
+            buffer = kwargs.get("buffer")
+            offset = kwargs.get("offset", 0)
+            self.from_bytes(buffer[offset:offset + ctypes.sizeof(self)])
+
+    ############################################################################
+
+    def __repr__(self):
+        fields = getattr(self, '_fields_', None)
+        if fields:
+            items = (f"{f[0]}={getattr(self, f[0])!r}" for f in fields)
+            return f"{type(self).__name__}({', '.join(items)})"
+        return super().__repr__()
+
+################################################################################
+
 IMAGE_DOS_SIGNATURE = 0x5A4D      # MZ
 IMAGE_NT_SIGNATURE = 0x00004550   # PE00
 IMAGE_FILE_MACHINE_UNKNOWN = 0
 IMAGE_FILE_MACHINE_I386 = 0x014c
-fmt_IMAGE_DOS_HEADER = "30HL"
-size_IMAGE_DOS_HEADER = struct.calcsize(fmt_IMAGE_DOS_HEADER)
 
-fmt_IMAGE_FILE_HEADER_Machine = "LH"
-size_IMAGE_FILE_HEADER_Machine = struct.calcsize(fmt_IMAGE_FILE_HEADER_Machine)
+class IMAGE_DOS_HEADER(SerializableStruct):
+    _fields_ = (
+        ("signature", ctypes.c_ushort),
+        ("dummy", ctypes.c_ushort * 29),
+        ("e_lfanew", ctypes.c_ulong)
+        )
+
+class IMAGE_FILE_HEADER_Machine(SerializableStruct):
+    _fields_ = (("signature", ctypes.c_ulong), ("machine", ctypes.c_ushort))
 
 ################################################################################
 
 def is_x86_binary(filename):
     not_executable = ValueError("not an executable")
     with open(filename, "rb") as f:
-        dta = f.read(size_IMAGE_DOS_HEADER)
-        if len(dta) < size_IMAGE_DOS_HEADER:
+        size_IDH = ctypes.sizeof(IMAGE_DOS_HEADER)
+        dta = f.read(size_IDH)
+        if len(dta) < size_IDH:
             raise not_executable
-        t = struct.unpack(fmt_IMAGE_DOS_HEADER, dta)
-        if t[0] != IMAGE_DOS_SIGNATURE:
+        idh = IMAGE_DOS_HEADER(buffer=dta)
+        print(idh, idh.signature, idh.e_lfanew)
+        if idh.signature != IMAGE_DOS_SIGNATURE:
             raise not_executable
-        e_lfanew = t[-1]
-        f.seek(e_lfanew)
+        f.seek(idh.e_lfanew)
 
-        dta = f.read(size_IMAGE_FILE_HEADER_Machine)
-        if len(dta) < size_IMAGE_FILE_HEADER_Machine:
+        size_IFHM = ctypes.sizeof(IMAGE_FILE_HEADER_Machine)
+        dta = f.read(size_IFHM)
+        if len(dta) < size_IFHM:
             raise not_executable
-        signature, machine = struct.unpack(fmt_IMAGE_FILE_HEADER_Machine, dta)
-        if signature != IMAGE_NT_SIGNATURE:
+        ifhm = IMAGE_FILE_HEADER_Machine(buffer=dta)
+        print(ifhm, ifhm.signature, ifhm.machine)
+        if ifhm.signature != IMAGE_NT_SIGNATURE:
             raise not_executable
-        return machine == IMAGE_FILE_MACHINE_I386
+        return ifhm.machine == IMAGE_FILE_MACHINE_I386
 
 ################################################################################
 
-class namedstruct:
-    """Helper class for serialising and  deserialising C structs"""
-
-    def __init__(self, name, *args, **kwargs):
-        field_formats = [kwargs.get("endianness", "")]
-        field_names = []
-        for field_name, field_fmt in args:
-            field_names.append(field_name)
-            field_formats.append(field_fmt)
-        self._fmt = "".join(field_formats)
-        self._size = struct.calcsize(self._fmt)
-        expected = kwargs.get("expected_size", -1)
-        if expected >= 0 and expected != self._size:
-            raise RuntimeError(
-                f"actual size ({self._size}) != expected ({expected})"
-                )
-        self._nt = collections.namedtuple(name, field_names)
-
-    def __call__(self, *args):
-        return self._nt(*args)
-
-    def pack(self, *args):
-        if len(args) != 1 or not isinstance(args[0], self._nt):
-            return struct.pack(self._fmt, *args)
-        return struct.pack(self._fmt, *args[0])
-
-    def unpack(self, data):
-        t = self._nt(*struct.unpack(self._fmt, data))
-        return t[0] if len(t) == 1 else t
-
-    def unpack_from(self, data, offset=0):
-        t = self._nt(*struct.unpack_from(self._fmt, data, offset))
-        return t[0] if len(t) == 1 else t
-
-    def size(self):
-        return self._size
-
-################################################################################
-
-IAMH_t = namedstruct(
-    "IMAGE_ARCHIVE_MEMBER_HEADER",
-    ("Name",      "16s"),
-    ("Date",      "12s"),
-    ("UserID",    "6s"),
-    ("GroupID",   "6s"),
-    ("Mode",      "8s"),
-    ("Size",      "10s"),
-    ("EndHeader", "2s"),
-    endianness="<",
-    expected_size=60
-    )
+class IMAGE_ARCHIVE_MEMBER_HEADER(SerializableStruct):
+    _fields_ = (
+        ("Name",      ctypes.c_char * 16),
+        ("Date",      ctypes.c_char * 12),
+        ("UserID",    ctypes.c_char * 6),
+        ("GroupID",   ctypes.c_char * 6),
+        ("Mode",      ctypes.c_char * 8),
+        ("Size",      ctypes.c_char * 10),
+        ("EndHeader", ctypes.c_char * 2),
+        )
 
 ################################################################################
 
@@ -203,24 +202,22 @@ IMPORT_OBJECT_NAME_EXPORTAS = 4
 
 ################################################################################
 
-IOH_t = namedstruct(
-    "IMPORT_OBJECT_HEADER",
-    ("Sig1",          "H"), # Must be IMAGE_FILE_MACHINE_UNKNOWN
-    ("Sig2",          "H"), # Must be IMPORT_OBJECT_HDR_SIG2
-    ("Version",       "H"),
-    ("Machine",       "H"),
-    ("TimeDateStamp", "I"),
-    ("SizeOfData",    "I"),
-    ("OrdinalOrHint", "H"),
-    ("TypeNameRes",   "H"),
-    endianness="<",
-    expected_size=20
-    )
+class IMPORT_OBJECT_HEADER(SerializableStruct):
+    _fields_ = (
+        ("Sig1",          ctypes.c_ushort), # Must be IMAGE_FILE_MACHINE_UNKNOWN
+        ("Sig2",          ctypes.c_ushort), # Must be IMPORT_OBJECT_HDR_SIG2
+        ("Version",       ctypes.c_ushort),
+        ("Machine",       ctypes.c_ushort),
+        ("TimeDateStamp", ctypes.c_ulong),
+        ("SizeOfData",    ctypes.c_ulong),
+        ("OrdinalOrHint", ctypes.c_ushort),
+        ("TypeNameRes",   ctypes.c_ushort),
+        )
 
-IOH_TypeMask = 0x3
-IOH_TypeShift = 0
-IOH_NameMask = 0x1c
-IOH_NameShift = 2
+IOH_TYPEMASK = 0x3
+IOH_TYPESHIFT = 0
+IOH_NAMEMASK = 0x1c
+IOH_NAMESHIFT = 2
 
 ################################################################################
 
@@ -228,20 +225,25 @@ def fix_x86_decorations_in_lib(lib_name):
     with open(lib_name, "rb") as f:
         data = bytearray(f.read())
 
-    if data[:len(IMAGE_ARCHIVE_START)] != IMAGE_ARCHIVE_START:
+    lias = len(IMAGE_ARCHIVE_START)
+    lioh = ctypes.sizeof(IMPORT_OBJECT_HEADER)
+
+    if data[:lias] != IMAGE_ARCHIVE_START:
         raise ValueError(f"not a library: {lib_name}")
 
-    offs = len(IMAGE_ARCHIVE_START)
+    namtyp = IMPORT_OBJECT_NAME_UNDECORATE << IOH_NAMESHIFT
+    ohdr = IMPORT_OBJECT_HEADER()
+    offs = lias
     while offs < len(data):
 
-        ahdr = IAMH_t.unpack_from(data, offs)
+        ahdr = IMAGE_ARCHIVE_MEMBER_HEADER(buffer=data, offset=offs)
         obj_size = int(ahdr.Size)
 
-        if obj_size < IOH_t.size():
-            raise ValueError("corrupt library: obj_size < IOH_t.size()")
+        if obj_size < lioh:
+            raise ValueError("corrupt library: obj_size < IMPORT_OBJECT_HEADER")
 
-        ooffs = offs + IAMH_t.size()
-        ohdr = IOH_t.unpack_from(data, ooffs)
+        ooffs = offs + ctypes.sizeof(ahdr)
+        ohdr.from_bytes(data[ooffs:])
 
         have_to_patch = (
             ohdr.Sig1 == IMAGE_FILE_MACHINE_UNKNOWN and
@@ -249,14 +251,10 @@ def fix_x86_decorations_in_lib(lib_name):
             ohdr.Machine == IMAGE_FILE_MACHINE_I386
             )
         if have_to_patch:
-            tnr = (
-                (ohdr.TypeNameRes & ~IOH_NameMask) |
-                (IMPORT_OBJECT_NAME_UNDECORATE << IOH_NameShift)
-                )
-            new_ohdr = IOH_t(*(ohdr[:-1] + (tnr,)))
-            data[ooffs : ooffs + IOH_t.size()] = IOH_t.pack(new_ohdr)
+            ohdr.TypeNameRes = (ohdr.TypeNameRes & ~IOH_NAMEMASK) | namtyp
+            data[ooffs : ooffs + lioh] = bytes(ohdr)
 
-        thisMemberSize = obj_size + IAMH_t.size()
+        thisMemberSize = obj_size + ctypes.sizeof(ahdr)
         thisMemberSize = (thisMemberSize + 1) & ~1  # round up
         offs += thisMemberSize
 
@@ -293,10 +291,13 @@ def get_exports(filename, tools):
         #        set). Should symbol information not be available it will only
         #        output the external name, keeping rx_exp86 from matching.
 
-        return [
+        result = [
             decorate_x86_export(m.group(1), m.group(2))
             for m in rx_exp86.finditer(out)
             ]
+        if not result:
+            raise ValueError("didn't find any x86 exports (no symbols?)")
+        return result
 
 ################################################################################
 
