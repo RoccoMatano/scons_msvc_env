@@ -148,7 +148,6 @@ def is_x86_binary(filename):
         if len(dta) < size_IDH:
             raise not_executable
         idh = IMAGE_DOS_HEADER(buffer=dta)
-        print(idh, idh.signature, idh.e_lfanew)
         if idh.signature != IMAGE_DOS_SIGNATURE:
             raise not_executable
         f.seek(idh.e_lfanew)
@@ -158,7 +157,6 @@ def is_x86_binary(filename):
         if len(dta) < size_IFHM:
             raise not_executable
         ifhm = IMAGE_FILE_HEADER_Machine(buffer=dta)
-        print(ifhm, ifhm.signature, ifhm.machine)
         if ifhm.signature != IMAGE_NT_SIGNATURE:
             raise not_executable
         return ifhm.machine == IMAGE_FILE_MACHINE_I386
