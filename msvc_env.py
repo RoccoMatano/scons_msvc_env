@@ -149,6 +149,7 @@ class BuildCfg:
     verbose: bool = False
     prefix: str = ""
     defines: dict = dataclasses.field(default_factory=dict)
+    nocache: bool = False
 
     def copy(self):
         # since 'defines' is a container, we have to do a deep copy
@@ -216,7 +217,9 @@ except OSError:
     pass
 
 
-def _get_msvc_env(ver, arch):
+def _get_msvc_env(ver, arch, ignore_cache):
+    if ignore_cache:
+        return _setup_tool_env(ver.value, arch.value)
     global _env_cache
     key = f"vc{ver.value}_{arch.value}"
     if not key in _env_cache:
@@ -255,6 +258,7 @@ def _parse_options(cfg):
             AddOption("--noasm", action="store_true", help="no asm listings")
             AddOption("--verbose", action="store_true", help="be verbose")
             AddOption("--prefix", help="build path pefix")
+            AddOption("--nocache", help="ignore cached msvc environments")
 
         GetOption = SCons.Script.GetOption
         ver = GetOption("vc")
@@ -277,6 +281,8 @@ def _parse_options(cfg):
             cfg.nomap = True
         if GetOption("noasm"):
             cfg.noasm = True
+        if GetOption("nocache"):
+            cfg.nocache = True
         if GetOption("verbose"):
             cfg.verbose = True
             logging.basicConfig(level=logging.DEBUG)
@@ -312,7 +318,8 @@ class MsvcEnvironment(SConsEnvironment):
 
         # since we have inhibited the standard detection, we have to catch up
         # on setting 'ENV'.
-        for k, v in _get_msvc_env(self.cfg.ver, self.cfg.arch).items():
+        vcenv = _get_msvc_env(self.cfg.ver, self.cfg.arch, self.cfg.nocache)
+        for k, v in vcenv.items():
             self.PrependENVPath(k, v, delete_existing=True)
 
         # now we are going to adapt SCons' MSVC support
@@ -383,7 +390,12 @@ class MsvcEnvironment(SConsEnvironment):
     ############################################################################
 
     def _cleanup(self):
-        kwargs = {"check": False, "env": self["ENV"], "shell": True}
+        kwargs = {
+            "check": False,
+            "stderr": subprocess.PIPE,
+            "env": self["ENV"],
+            "shell": True,
+            }
         subprocess.run(["mspdbsrv", "-stop"], **kwargs)
 
     ############################################################################
