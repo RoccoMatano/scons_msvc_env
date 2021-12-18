@@ -150,6 +150,7 @@ class BuildCfg:
     prefix: str = ""
     defines: dict = dataclasses.field(default_factory=dict)
     nocache: bool = False
+    noltcg: bool = False
 
     def copy(self):
         # since 'defines' is a container, we have to do a deep copy
@@ -258,7 +259,16 @@ def _parse_options(cfg):
             AddOption("--noasm", action="store_true", help="no asm listings")
             AddOption("--verbose", action="store_true", help="be verbose")
             AddOption("--prefix", help="build path pefix")
-            AddOption("--nocache", help="ignore cached msvc environments")
+            AddOption(
+                "--nocache",
+                action="store_true",
+                help="ignore cached msvc environments"
+                )
+            AddOption(
+                "--noltcg",
+                action="store_true",
+                help="no link time code generation"
+                )
 
         GetOption = SCons.Script.GetOption
         ver = GetOption("vc")
@@ -283,6 +293,8 @@ def _parse_options(cfg):
             cfg.noasm = True
         if GetOption("nocache"):
             cfg.nocache = True
+        if GetOption("noltcg"):
+            cfg.noltcg = True
         if GetOption("verbose"):
             cfg.verbose = True
             logging.basicConfig(level=logging.DEBUG)
@@ -600,9 +612,13 @@ class MsvcEnvironment(SConsEnvironment):
 
     def get_optimized_flags(self):
         ver = self.cfg.ver.value
+        ltcg = not self.cfg.noltcg
 
         cflags, lflags = self._get_common_flags()
-        cflags.extend(["/O1", "/Os", "/Oy", "/GL", "/GR-"])
+        cflags.extend(["/O1", "/Os", "/Oy", "/GR-"])
+        if ltcg:
+            cflags.append("/GL")
+
         if ver >= 14:
             cflags.append("/Gw")
 
@@ -611,12 +627,13 @@ class MsvcEnvironment(SConsEnvironment):
             "/release",
             "/dynamicbase:no",
             "/fixed",
-            "/ltcg",
             "/last:.pdata",
             "/opt:ref",
             "/opt:icf",
             ]
         lflags.extend(ladd)
+        if ltcg:
+            lflags.append("/ltcg")
         if ver >= 14:
             lflags.append("/nocoffgrpinfo")
         # try to optimize use of sections
