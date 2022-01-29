@@ -277,9 +277,9 @@ def decorate_x86_export(undec, dec):
 
 ################################################################################
 
-def get_exports(filename, tools):
-    out = tools.dumpbin_to_str(["/exports", str(filename)])
-    if not tools.arch.is_x86():
+def get_exports(filename, tool_chain):
+    out = tool_chain.dumpbin(["/exports", str(filename)])
+    if not tool_chain.arch.is_x86():
         return rx_exp64.findall(out)
     else:
         # need to handle those weird decorations
@@ -299,8 +299,8 @@ def get_exports(filename, tools):
 
 ################################################################################
 
-def def_from_dll(def_name, dll_name, tools):
-    exports = get_exports(dll_name, tools)
+def def_from_dll(def_name, dll_name, tool_chain):
+    exports = get_exports(dll_name, tool_chain)
     with open(def_name, "wt") as d:
         d.write(f"LIBRARY {pathlib.Path(dll_name).stem}\nEXPORTS\n")
         for e in exports:
@@ -309,46 +309,47 @@ def def_from_dll(def_name, dll_name, tools):
 
 ################################################################################
 
-def lib_from_dll(lib_name, dll_name, tools):
+def lib_from_dll(lib_name, dll_name, tool_chain):
     def_name = pathlib.Path(lib_name).with_suffix(".def")
-    def_from_dll(def_name, dll_name, tools)
+    def_from_dll(def_name, dll_name, tool_chain)
     args = [
         "/nologo",
         "/ignore:4102", # export of deleting destructor
-        f"/machine:{tools.arch.value}",
+        f"/machine:{tool_chain.arch.value}",
         f"/def:{def_name}",
         f"/out:{lib_name}"
         ]
-    tools.lib(args)
-    if tools.arch.is_x86():
+    tool_chain.lib(args)
+    if tool_chain.arch.is_x86():
         fix_x86_decorations_in_lib(lib_name)
 
 ################################################################################
 
-def lib_from_system_dll(lib_path, dll_name, tools, prefix=""):
+def lib_from_system_dll(lib_path, dll_name, tool_chain, prefix=""):
     windir = pathlib.Path(os.environ["windir"])
     dll = windir / "system32" / dll_name
-    if tools.arch.is_x86():
+    if tool_chain.arch.is_x86():
         env_arch = os.environ["PROCESSOR_ARCHITECTURE"].lower()
         wow = os.environ.get("PROCESSOR_ARCHITEW6432", "")
         if env_arch != "x86" or wow:
             dll = windir / "syswow64" / dll_name
     dll_lib = lib_path / (prefix + dll.with_suffix(".lib").name)
-    lib_from_dll(dll_lib, dll, tools)
+    lib_from_dll(dll_lib, dll, tool_chain)
     return dll_lib
 
 ################################################################################
 
 if __name__ == "__main__":
 
-    from .tools import Tools, Arch
+    from msvc_tools import ToolChain, Arch, DEFAULT_VER
 
     dll_name = pathlib.Path(sys.argv[1])
     if len(sys.argv) > 2:
         lib_name = pathlib.Path(sys.argv[2])
     else:
-        lib_name = dll_name.parent / (dll_name.stem + ".lib")
+
+        lib_name = pathlib.Path(".") / (dll_name.stem + ".lib")
     arch = Arch.X86 if is_x86_binary(dll_name) else Arch.X64
-    lib_from_dll(lib_name, dll_name, Tools(arch=arch))
+    lib_from_dll(lib_name, dll_name, ToolChain.default(arch))
 
 ################################################################################

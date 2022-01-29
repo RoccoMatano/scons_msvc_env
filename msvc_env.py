@@ -26,16 +26,9 @@ While I like the way SCons allows to *use* MSVC, I completely dislike the way
 how SCons can be configured regarding the version of MSVC it is going to use.
 I prefer to make that decision on a per project basis *and* being able to
 choose from several versions that are installed in a 'copy deployment' fashion
-(i.e. cannot be found by SCons).
-
-The code to choose one of the installed versions and to setup SCons environments
-for those can be found in this file. The information about which versions are
-available, where they can be found and how to setup environment variables is
-kept in an external script. The path to that script is either taken from the
-environment variable 'SET_VC_PATH' or it's simply the hardcoded name 'setvc'.
-That script takes two parameters: The first one is the MSVS version number (
-e.g. 16 for Visual Studio 2019) and the second one is the target architechture
-(e.g. 'x64').
+(i.e. cannot be found by SCons). The code to choose one of the installed
+versions and to setup SCons environments for those can be found in module
+'msvc_tools'.
 
 Additional features compared to standard SCons:
  - support for assembler listings
@@ -49,22 +42,21 @@ Additional features compared to standard SCons:
 
 import os
 import re
-import enum
 import copy
-import time
-import json
 import atexit
 import logging
 import pathlib
 import subprocess
 import dataclasses
+import msvc_tools
+from msvc_tools import Ver, Arch, DEFAULT_VER, DEFAULT_ARCH
+import implib_from_dll
 import SCons
 # While SCons.Script has a sub-module called 'SConscript' it also defines an
 # attribute of the same name. So we have to use 'SConscript' in an import
 # statement to get hold of the sub-module.
 from SCons.Script.SConscript import SConsEnvironment
 import SCons.Defaults
-from implib_from_dll import lib_from_dll
 
 ################################################################################
 
@@ -81,54 +73,8 @@ SCons.Defaults.DefaultEnvironment(tools=[])
 
 ################################################################################
 
-class Ver(enum.IntEnum):
-    VC9  =  9   # Visual Studio 2008, _MSC_VER 1500, MSVC  9.0
-    VC11 = 11   # Visual Studio 2012, _MSC_VER 1700, MSVC 11.0
-    VC14 = 14   # Visual Studio 2015, _MSC_VER 1900, MSVC 14.0
-    VC15 = 15   # Visual Studio 2017, _MSC_VER 1910, MSVC 14.1
-    VC16 = 16   # Visual Studio 2019, _MSC_VER 1920, MSVC 14.2
-    VC17 = 17   # Visual Studio 2022, _MSC_VER 1930, MSVC 14.3
-
-    def msvc_ver(self):
-        lut = {
-            # HACK!: Old msvc versions did not require that the pch object was
-            #        was given to the linker as an input, but newer version
-            #        need this (else error LNK2011). SCons thinks that version
-            #        11.0 is the first that requres this, but that is WRONG!
-            #        Version 9.0 already needs it. So we tell SCons that it
-            #        should handle 9.0 like 11.0.
-             9: "11.0",
-            11: "11.0",
-            14: "14.0",
-            15: "14.1",
-            16: "14.2",
-            17: "14.3",
-            }
-        return lut[self.value]
-
-################################################################################
-
-class Arch(enum.Enum):
-    X86   = "x86"
-    I386  = "x86"
-    X64   = "x64"
-    AMD64 = "x64"
-
-    def is_x86(self):
-        return self.value == self.X86.value
-
-    def is_x64(self):
-        return self.value == self.X64.value
-
-    def scons_arch(self):
-        return "x86" if self.value == self.X86.value else "amd64"
-
-################################################################################
-
 globals().update(Ver.__members__)
 globals().update(Arch.__members__)
-DEFAULT_VER  = VC17
-DEFAULT_ARCH = X64
 
 THIS_DIR = pathlib.Path(__file__).parent.resolve()
 
@@ -155,87 +101,6 @@ class BuildCfg:
     def copy(self):
         # since 'defines' is a container, we have to do a deep copy
         return copy.deepcopy(self)
-
-################################################################################
-
-_init_env = os.environ.copy()
-
-def _setup_tool_env(ver, arch):
-    #
-    # Here we call a batch file called 'setvc' that sets the required
-    # environment variables (esp. PATH, INCLUDE and LIB), so that it is
-    # possible to use the tools according to 'ver' and 'arch'.
-    # But those variables are set in a seperate shell process. In order
-    # to get hold of the environ of that shell, we not only execute
-    # the batch file, but we also let the shell output its environment
-    # to stdout (via '&& set'). Then we parse that output.
-
-    start = time.perf_counter()
-
-    setvc = os.environ.get("SET_VC_PATH", "setvc")
-
-    args = [setvc, str(ver), str(arch), "&&", "set"]
-    logging.info(f"COMMAND\n{subprocess.list2cmdline(args)}\n")
-    # Use _init_env so that this function can be called repeatedly even
-    # if the extracted env will become part of the env of this process.
-    out = subprocess.run(
-        args,
-        env=_init_env,
-        shell=True, # use shell for PATH and extension handling
-        text=True,
-        check=True,
-        stdout=subprocess.PIPE
-        ).stdout
-    env = {}
-    keep = (
-        "INCLUDE",
-        "LIB",
-        "PATH",
-        "VCINSTALLDIR",
-        "_NT_SYMBOL_PATH",  # need _NT_SYMBOL_PATH for ImpLibFromSystemDll
-        )
-    for line in reversed(out.splitlines()):
-        idx = line.find("=")
-        if idx < 0:
-            break
-        name = line[:idx].upper()
-        if name in keep:
-            value = line[idx + 1:]
-            logging.info(f"{name}={value}")
-            env[name] = value
-    logging.info(f"time for mvsc environment: {time.perf_counter() - start}s")
-    return env
-
-################################################################################
-
-_env_cache = {}
-ENV_CACHE_FILE = THIS_DIR / "msvc_env_cache.json"
-
-try:
-    with open(ENV_CACHE_FILE, "r") as jfile:
-        _env_cache = json.load(jfile)
-except OSError:
-    pass
-
-
-def _get_msvc_env(ver, arch, ignore_cache):
-    if ignore_cache:
-        return _setup_tool_env(ver.value, arch.value)
-    global _env_cache
-    key = f"vc{ver.value}_{arch.value}"
-    if not key in _env_cache:
-        _env_cache[key] = _setup_tool_env(ver.value, arch.value)
-        try:
-            with open(ENV_CACHE_FILE, "w") as jfile:
-                json.dump(_env_cache, jfile, indent=4)
-        except OSError:
-            pass
-    return _env_cache[key]
-
-
-def reset_env_cache():
-    global _env_cache
-    _env_cache = {}
 
 ################################################################################
 
@@ -324,13 +189,17 @@ class MsvcEnvironment(SConsEnvironment):
         # let SCons know which version we are going to use and init SCons'
         # MSVC support while inhibiting detection of MVSC
         kw["MSVC_SETUP_RUN"] = True # this inhibts the detection
-        kw["MSVC_VERSION"] = kw["MSVS_VERSION"] = self.cfg.ver.msvc_ver()
+        kw["MSVC_VERSION"] = kw["MSVS_VERSION"] = self.cfg.ver.scons_ver()
         kw["TARGET_ARCH"] = self.cfg.arch.scons_arch()
         super().__init__(**kw)
 
         # since we have inhibited the standard detection, we have to catch up
         # on setting 'ENV'.
-        vcenv = _get_msvc_env(self.cfg.ver, self.cfg.arch, self.cfg.nocache)
+        vcenv = msvc_tools.get_msvc_env(
+            self.cfg.ver,
+            self.cfg.arch,
+            self.cfg.nocache
+            )
         for k, v in vcenv.items():
             self.PrependENVPath(k, v, delete_existing=True)
 
@@ -720,33 +589,9 @@ class MsvcEnvironment(SConsEnvironment):
 
     ############################################################################
 
-    class _Tools:
-        def __init__(self, arch, ENV):
-            self.arch = arch
-            self.ENV = ENV
-
-        def _run(self, args, catch_output=False):
-            logging.info(f"COMMAND: {subprocess.list2cmdline(args)}")
-            kwargs = {"check": True, "shell": True, "env": self.ENV}
-            if catch_output:
-                kwargs["stdout"] = subprocess.PIPE
-            proc = subprocess.run(args, **kwargs)
-            if catch_output:
-                return proc.stdout.decode("ascii", errors="backslashreplace")
-
-        def lib(self, args):
-            res_args = ["lib"]
-            res_args.extend(map(str, args))
-            self._run(res_args)
-
-        def dumpbin_to_str(self, args):
-            res_args = ["dumpbin"]
-            res_args.extend(map(str, args))
-            return self._run(res_args, True)
-
     def _ilfsdll_action(self, target, source, env):
-        tools = self._Tools(self.cfg.arch, self["ENV"])
-        lib_from_dll(target[0].path, source[0].path, tools)
+        tools = msvc_tools.ToolChain(self.cfg.arch, self["ENV"])
+        implib_from_dll.lib_from_dll(target[0].path, source[0].path, tools)
 
     ############################################################################
 
