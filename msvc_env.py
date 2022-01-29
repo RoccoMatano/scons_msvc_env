@@ -27,7 +27,7 @@ how SCons can be configured regarding the version of MSVC it is going to use.
 I prefer to make that decision on a per project basis *and* being able to
 choose from several versions that are installed in a 'copy deployment' fashion
 (i.e. cannot be found by SCons). The code to choose one of the installed
-versions and to setup SCons environments for those can be found in module
+versions and to setup environments for those can be found in module
 'msvc_tools'.
 
 Additional features compared to standard SCons:
