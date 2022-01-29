@@ -4,7 +4,7 @@ import pathlib
 
 ################################################################################
 
-VER = "4.2.0"
+VER = "4.3.0"
 SCONS_DIR = f"scons-{VER}/scons-local-{VER}"
 BASES = ["c:/prj/progs", "c:/projects"]
 SCONS_PROSPECTS = [pathlib.Path(b) / SCONS_DIR for b in BASES]
@@ -23,7 +23,7 @@ def prepare_args():
                         return True
             return False
         if not build_script_in_args(args):
-            sys.argv[1:] = ["-f", "sconstruct.py"] + args
+            sys.argv[1:1] = ["-f", "sconstruct.py"]
 
 ################################################################################
 
