@@ -212,8 +212,8 @@ class MsvcEnvironment(SConsEnvironment):
             )
         self.Append(CCFLAGS=cflags)
         self.Append(LINKFLAGS=lflags)
-        if cfg.defines:
-            self.Append(CPPDEFINES=cfg.defines)
+        if self.cfg.defines:
+            self.Append(CPPDEFINES=self.cfg.defines)
 
         if not self.cfg.nomap:
             self["MAPFILE"] = True
