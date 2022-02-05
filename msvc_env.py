@@ -481,6 +481,7 @@ class MsvcEnvironment(SConsEnvironment):
 
     def get_optimized_flags(self):
         ver = self.cfg.ver.value
+        arch = self.cfg.arch.value
         ltcg = not self.cfg.noltcg
 
         cflags, lflags = self._get_common_flags()
@@ -500,6 +501,17 @@ class MsvcEnvironment(SConsEnvironment):
             "/opt:ref",
             "/opt:icf",
             ]
+        if arch == "x64" and ver >= 14:
+            # add flags that merge .xdata and .pdata into .vanish so that
+            # squab can discard them (the linker doesn't let you merge .xdata
+            # directly into .pdata)
+            vanish = [
+                '/section:.vanish,R',
+                '/merge:.xdata=.vanish',
+                '/merge:.pdata=.vanish',
+                '/ignore:4253',
+                ]
+            ladd.extend(vanish)
         lflags.extend(ladd)
         if ltcg:
             lflags.append("/ltcg")
