@@ -347,8 +347,8 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         lib_name = pathlib.Path(sys.argv[2])
     else:
-
         lib_name = pathlib.Path(".") / (dll_name.stem + ".lib")
+
     arch = Arch.X86 if is_x86_binary(dll_name) else Arch.X64
     lib_from_dll(lib_name, dll_name, ToolChain.default(arch))
 
