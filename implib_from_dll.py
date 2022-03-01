@@ -95,8 +95,27 @@ class SerializableStruct(ctypes.Structure):
 
     ############################################################################
 
-    def from_bytes(self, src):
-        ctypes.memmove(ctypes.byref(self), bytes(src), ctypes.sizeof(self))
+    @classmethod
+    def size(cls):
+        return ctypes.sizeof(cls)
+
+    ############################################################################
+
+    def from_bytes(self, buffer, offset=0):
+        size = self.size()
+        if len(buffer) < offset + size:
+            raise ValueError(f"source buffer is too short")
+        # While memmove can handle bytes directly, it cannot deal with
+        # bytearray. So we have to convert to bytes first.
+        ctypes.memmove(ctypes.byref(self), bytes(buffer[offset:]), size)
+
+    ############################################################################
+
+    def to_bytes(self):
+        # To convert an instance of this class to bytes we take advantage of
+        # ctypes' implict ability of converting any ctypes type to bytes by
+        # simply calling:
+        return bytes(self)
 
     ############################################################################
 
@@ -108,9 +127,7 @@ class SerializableStruct(ctypes.Structure):
             raise RuntimeError("use either positional or named arguments")
         else:
             # init structure from serialized byte stream
-            buffer = kwargs.get("buffer")
-            offset = kwargs.get("offset", 0)
-            self.from_bytes(buffer[offset:offset + ctypes.sizeof(self)])
+            self.from_bytes(kwargs.get("buffer"), kwargs.get("offset", 0))
 
     ############################################################################
 
@@ -143,19 +160,13 @@ class IMAGE_FILE_HEADER_Machine(SerializableStruct):
 def is_x86_binary(filename):
     not_executable = ValueError("not an executable")
     with open(filename, "rb") as f:
-        size_IDH = ctypes.sizeof(IMAGE_DOS_HEADER)
-        dta = f.read(size_IDH)
-        if len(dta) < size_IDH:
-            raise not_executable
+        dta = f.read(IMAGE_DOS_HEADER.size())
         idh = IMAGE_DOS_HEADER(buffer=dta)
         if idh.signature != IMAGE_DOS_SIGNATURE:
             raise not_executable
         f.seek(idh.e_lfanew)
 
-        size_IFHM = ctypes.sizeof(IMAGE_FILE_HEADER_Machine)
-        dta = f.read(size_IFHM)
-        if len(dta) < size_IFHM:
-            raise not_executable
+        dta = f.read(IMAGE_FILE_HEADER_Machine.size())
         ifhm = IMAGE_FILE_HEADER_Machine(buffer=dta)
         if ifhm.signature != IMAGE_NT_SIGNATURE:
             raise not_executable
@@ -224,7 +235,7 @@ def fix_x86_decorations_in_lib(lib_name):
         data = bytearray(f.read())
 
     lias = len(IMAGE_ARCHIVE_START)
-    lioh = ctypes.sizeof(IMPORT_OBJECT_HEADER)
+    lioh = IMPORT_OBJECT_HEADER.size()
 
     if data[:lias] != IMAGE_ARCHIVE_START:
         raise ValueError(f"not a library: {lib_name}")
@@ -240,7 +251,7 @@ def fix_x86_decorations_in_lib(lib_name):
         if obj_size < lioh:
             raise ValueError("corrupt library: obj_size < IMPORT_OBJECT_HEADER")
 
-        ooffs = offs + ctypes.sizeof(ahdr)
+        ooffs = offs + ahdr.size()
         ohdr.from_bytes(data[ooffs:])
 
         have_to_patch = (
@@ -250,9 +261,9 @@ def fix_x86_decorations_in_lib(lib_name):
             )
         if have_to_patch:
             ohdr.TypeNameRes = (ohdr.TypeNameRes & ~IOH_NAMEMASK) | namtyp
-            data[ooffs : ooffs + lioh] = bytes(ohdr)
+            data[ooffs : ooffs + lioh] = ohdr.to_bytes()
 
-        thisMemberSize = obj_size + ctypes.sizeof(ahdr)
+        thisMemberSize = obj_size + ahdr.size()
         thisMemberSize = (thisMemberSize + 1) & ~1  # round up
         offs += thisMemberSize
 
