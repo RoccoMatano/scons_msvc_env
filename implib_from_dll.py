@@ -90,69 +90,19 @@ rx_fastcall = re.compile(r"^@[_a-zA-Z][_a-zA-Z0-9]+(@\d+)$")
 
 ################################################################################
 
-class SerializableStruct(ctypes.Structure):
-    "Extending ctypes.Structure for easy serialising and deserialising"
-
-    ############################################################################
-
-    @classmethod
-    def size(cls):
-        return ctypes.sizeof(cls)
-
-    ############################################################################
-
-    def from_bytes(self, buffer, offset=0):
-        size = self.size()
-        if len(buffer) < offset + size:
-            raise ValueError(f"source buffer is too short")
-        # While memmove can handle bytes directly, it cannot deal with
-        # bytearray. So we have to convert to bytes first.
-        ctypes.memmove(ctypes.byref(self), bytes(buffer[offset:]), size)
-
-    ############################################################################
-
-    def to_bytes(self):
-        # To convert an instance of this class to bytes we take advantage of
-        # ctypes' implict ability of converting any ctypes type to bytes by
-        # simply calling:
-        return bytes(self)
-
-    ############################################################################
-
-    def __init__(self, *args, **kwargs):
-        if not kwargs:
-            # init fields from positional arguments
-            super().__init__(*args)
-        elif args:
-            raise RuntimeError("use either positional or named arguments")
-        else:
-            # init structure from serialized byte stream
-            self.from_bytes(kwargs.get("buffer"), kwargs.get("offset", 0))
-
-    ############################################################################
-
-    def __repr__(self):
-        fields = getattr(self, '_fields_', None)
-        if fields:
-            items = (f"{f[0]}={getattr(self, f[0])!r}" for f in fields)
-            return f"{type(self).__name__}({', '.join(items)})"
-        return super().__repr__()
-
-################################################################################
-
 IMAGE_DOS_SIGNATURE = 0x5A4D      # MZ
 IMAGE_NT_SIGNATURE = 0x00004550   # PE00
 IMAGE_FILE_MACHINE_UNKNOWN = 0
 IMAGE_FILE_MACHINE_I386 = 0x014c
 
-class IMAGE_DOS_HEADER(SerializableStruct):
+class IMAGE_DOS_HEADER(ctypes.Structure):
     _fields_ = (
         ("signature", ctypes.c_ushort),
         ("dummy", ctypes.c_ushort * 29),
         ("e_lfanew", ctypes.c_ulong)
         )
 
-class IMAGE_FILE_HEADER_Machine(SerializableStruct):
+class IMAGE_FILE_HEADER_Machine(ctypes.Structure):
     _fields_ = (("signature", ctypes.c_ulong), ("machine", ctypes.c_ushort))
 
 ################################################################################
@@ -160,21 +110,21 @@ class IMAGE_FILE_HEADER_Machine(SerializableStruct):
 def is_x86_binary(filename):
     not_executable = ValueError("not an executable")
     with open(filename, "rb") as f:
-        dta = f.read(IMAGE_DOS_HEADER.size())
-        idh = IMAGE_DOS_HEADER(buffer=dta)
+        dta = f.read(ctypes.sizeof(IMAGE_DOS_HEADER))
+        idh = IMAGE_DOS_HEADER.from_buffer_copy(dta)
         if idh.signature != IMAGE_DOS_SIGNATURE:
             raise not_executable
         f.seek(idh.e_lfanew)
 
-        dta = f.read(IMAGE_FILE_HEADER_Machine.size())
-        ifhm = IMAGE_FILE_HEADER_Machine(buffer=dta)
+        dta = f.read(ctypes.sizeof(IMAGE_FILE_HEADER_Machine))
+        ifhm = IMAGE_FILE_HEADER_Machine.from_buffer_copy(dta)
         if ifhm.signature != IMAGE_NT_SIGNATURE:
             raise not_executable
         return ifhm.machine == IMAGE_FILE_MACHINE_I386
 
 ################################################################################
 
-class IMAGE_ARCHIVE_MEMBER_HEADER(SerializableStruct):
+class IMAGE_ARCHIVE_MEMBER_HEADER(ctypes.Structure):
     _fields_ = (
         ("Name",      ctypes.c_char * 16),
         ("Date",      ctypes.c_char * 12),
@@ -211,7 +161,7 @@ IMPORT_OBJECT_NAME_EXPORTAS = 4
 
 ################################################################################
 
-class IMPORT_OBJECT_HEADER(SerializableStruct):
+class IMPORT_OBJECT_HEADER(ctypes.Structure):
     _fields_ = (
         ("Sig1",          ctypes.c_ushort), # Must be IMAGE_FILE_MACHINE_UNKNOWN
         ("Sig2",          ctypes.c_ushort), # Must be IMPORT_OBJECT_HDR_SIG2
@@ -235,24 +185,24 @@ def fix_x86_decorations_in_lib(lib_name):
         data = bytearray(f.read())
 
     lias = len(IMAGE_ARCHIVE_START)
-    lioh = IMPORT_OBJECT_HEADER.size()
+    lioh = ctypes.sizeof(IMPORT_OBJECT_HEADER)
+    lahdr = ctypes.sizeof(IMAGE_ARCHIVE_MEMBER_HEADER)
 
     if data[:lias] != IMAGE_ARCHIVE_START:
         raise ValueError(f"not a library: {lib_name}")
 
     namtyp = IMPORT_OBJECT_NAME_UNDECORATE << IOH_NAMESHIFT
-    ohdr = IMPORT_OBJECT_HEADER()
     offs = lias
     while offs < len(data):
 
-        ahdr = IMAGE_ARCHIVE_MEMBER_HEADER(buffer=data, offset=offs)
+        ahdr = IMAGE_ARCHIVE_MEMBER_HEADER.from_buffer_copy(data[offs:])
         obj_size = int(ahdr.Size)
 
         if obj_size < lioh:
             raise ValueError("corrupt library: obj_size < IMPORT_OBJECT_HEADER")
 
-        ooffs = offs + ahdr.size()
-        ohdr.from_bytes(data[ooffs:])
+        ooffs = offs + lahdr
+        ohdr = IMPORT_OBJECT_HEADER.from_buffer_copy(data[ooffs:])
 
         have_to_patch = (
             ohdr.Sig1 == IMAGE_FILE_MACHINE_UNKNOWN and
@@ -261,11 +211,11 @@ def fix_x86_decorations_in_lib(lib_name):
             )
         if have_to_patch:
             ohdr.TypeNameRes = (ohdr.TypeNameRes & ~IOH_NAMEMASK) | namtyp
-            data[ooffs : ooffs + lioh] = ohdr.to_bytes()
+            data[ooffs : ooffs + lioh] = bytes(ohdr)
 
-        thisMemberSize = obj_size + ahdr.size()
-        thisMemberSize = (thisMemberSize + 1) & ~1  # round up
-        offs += thisMemberSize
+        this_member_size = obj_size + lahdr
+        this_member_size = (this_member_size + 1) & ~1  # round up
+        offs += this_member_size
 
     with open(lib_name, "wb") as f:
         f.write(data)
