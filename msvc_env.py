@@ -99,7 +99,8 @@ class BuildCfg:
     noltcg: bool = False
 
     def copy(self):
-        # since 'defines' is a container, we have to do a deep copy
+        # since 'defines' is a mutable container, a simple 'copy' or even a
+        # 'dataclasses.replace' is not enough and we have to do a deep copy
         return copy.deepcopy(self)
 
 ################################################################################
@@ -205,6 +206,9 @@ class MsvcEnvironment(SConsEnvironment):
 
         # now we are going to adapt SCons' MSVC support
 
+        # initially no pch
+        self.pch = ""
+
         # set our preferred flags
         cflags, lflags = (
             self.get_not_optimized_flags() if self.cfg.nop else
@@ -264,9 +268,6 @@ class MsvcEnvironment(SConsEnvironment):
 
         # do not leave running mspdbsrv behind
         atexit.register(self._cleanup)
-
-        # initially no pch
-        self.pch = ""
 
     ############################################################################
 
