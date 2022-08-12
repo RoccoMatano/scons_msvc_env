@@ -44,6 +44,7 @@ import subprocess
 ################################################################################
 
 class Ver(enum.IntEnum):
+    VC6  =  6   # Visual Studio 6,    _MSC_VER 1200, MSVC  6.0
     VC9  =  9   # Visual Studio 2008, _MSC_VER 1500, MSVC  9.0
     VC11 = 11   # Visual Studio 2012, _MSC_VER 1700, MSVC 11.0
     VC14 = 14   # Visual Studio 2015, _MSC_VER 1900, MSVC 14.0
@@ -59,6 +60,7 @@ class Ver(enum.IntEnum):
             #        11.0 is the first that requres this, but that is WRONG!
             #        Version 9.0 already needs it. So we tell SCons that it
             #        should handle 9.0 like 11.0.
+             6: "6.0",
              9: "11.0",
             11: "11.0",
             14: "14.0",

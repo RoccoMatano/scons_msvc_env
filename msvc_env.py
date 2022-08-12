@@ -409,7 +409,7 @@ class MsvcEnvironment(SConsEnvironment):
             flags.append("/debug" if self.cfg.ver == VC9 else "/debug:full")
         if self.get("MAPFILE", None):
             flags.append(f"/map:{self.with_suffix(target[0], '.map')}")
-        if self.get("ASMLST", None):
+        if self.get("ASMLST", None) and self.cfg.ver > VC6:
             flags.append("/ltcgasmlist")
         return flags or None
 
