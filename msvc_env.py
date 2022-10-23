@@ -266,6 +266,12 @@ class MsvcEnvironment(SConsEnvironment):
             suffix=".i"
             )
 
+        # add a builder for the message compiler
+        self["BUILDERS"]["MC"] = self.Builder(
+            emitter=self._mc_emitter,
+            action=Action(self._mc_action, None),
+            )
+
         # do not leave running mspdbsrv behind
         atexit.register(self._cleanup)
 
@@ -493,6 +499,9 @@ class MsvcEnvironment(SConsEnvironment):
         if ver >= 14:
             cflags.append("/Gw")
 
+        if ver >= 17:
+            cflags.append("/volatileMetadata-")
+
         ladd = [
             "/incremental:no",
             "/release",
@@ -622,5 +631,25 @@ class MsvcEnvironment(SConsEnvironment):
         res = subprocess.run(com, **kwargs).stdout
         with open(str(target[0]), "wt") as pp:
             pp.write(res)
+
+    ############################################################################
+
+    def _mc_emitter(self, target, source, env):
+        target = [
+            self.with_suffix(source[0], ".rc"),
+            self.with_suffix(source[0], ".h"),
+            self.with_suffix(source[0], ".bin"),
+            ]
+        return target, source
+
+    ############################################################################
+
+    def _mc_action(self, target, source, env):
+        parent = str(pathlib.Path(target[0].get_path()).parent)
+        args = ["mc", "-h", parent, "-r", parent]
+        if self.get("MC_CREATE_ANSI", False):
+            args.append("-A")
+        args.append(str(source[0]))
+        subprocess.run(args, check=True, env=env["ENV"], shell=True)
 
 ################################################################################
