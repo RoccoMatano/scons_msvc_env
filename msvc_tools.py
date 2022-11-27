@@ -34,12 +34,18 @@ parameters: The first one is the MSVS version number (e.g. 16 for Visual Studio
 """
 
 import os
+import re
 import enum
 import time
 import json
 import logging
 import pathlib
-import subprocess
+from subprocess import (
+    run,
+    PIPE,
+    STDOUT,
+    list2cmdline
+    )
 
 ################################################################################
 
@@ -111,16 +117,16 @@ def _setup_tool_env(ver, arch):
     setvc = os.environ.get("SET_VC_PATH", "setvc")
 
     args = [setvc, str(ver), str(arch), "&&", "set"]
-    logging.info(f"COMMAND\n{subprocess.list2cmdline(args)}\n")
+    logging.info(f"COMMAND\n{list2cmdline(args)}\n")
     # Use _init_env so that this function can be called repeatedly even
     # if the extracted env will become part of the env of this process.
-    out = subprocess.run(
+    out = run(
         args,
         env=_init_env,
         shell=True, # use shell for PATH and extension handling
         text=True,
         check=True,
-        stdout=subprocess.PIPE
+        stdout=PIPE
         ).stdout
     env = {}
     keep = (
@@ -129,6 +135,7 @@ def _setup_tool_env(ver, arch):
         "PATH",
         "VCINSTALLDIR",
         "_NT_SYMBOL_PATH",  # need _NT_SYMBOL_PATH for ImpLibFromSystemDll
+        "SYSTEMROOT",       # cl sometimes needs this
         )
     for line in reversed(out.splitlines()):
         idx = line.find("=")
@@ -190,14 +197,24 @@ class ToolChain:
     def default(cls, arch=DEFAULT_ARCH):
         return cls(DEFAULT_VER, arch, False)
 
-    def _run(self, args, catch_output=False):
-        logging.info(f"COMMAND: {subprocess.list2cmdline(args)}")
+    def _run(self, args, capture_out=False, capture_err=False):
+        logging.info(f"COMMAND: {list2cmdline(args)}")
         kwargs = {"check": True, "shell": True, "env": self.env}
-        if catch_output:
-            kwargs["stdout"] = subprocess.PIPE
-        proc = subprocess.run(args, **kwargs)
-        if catch_output:
-            return proc.stdout.decode("ascii", errors="backslashreplace")
+        if capture_out:
+            kwargs["stdout"] = PIPE
+        if capture_err:
+            kwargs["stderr"] = STDOUT if capture_out else PIPE
+        proc = run(args, **kwargs)
+        output = proc.stdout if capture_out else proc.stderr
+        if output is not None:
+            return output.decode("ascii", errors="backslashreplace")
+
+    def get_cl_ver(self):
+        out = self._run(["cl"], True, True)
+        m = re.search(r"\s+(\d+(?:\.\d+)+)\s+", out)
+        if not m:
+            raise ValueError(f"version string not found:\n{out}")
+        return tuple(map(int, m.group(1).split('.')))
 
     def lib(self, args):
         res_args = ["lib"]
