@@ -189,7 +189,7 @@ class MsvcEnvironment(SConsEnvironment):
 
         # let SCons know which version we are going to use and init SCons'
         # MSVC support while inhibiting detection of MVSC
-        kw["MSVC_SETUP_RUN"] = True # this inhibts the detection
+        kw["MSVC_SETUP_RUN"] = True  # this inhibts the detection
         kw["MSVC_VERSION"] = kw["MSVS_VERSION"] = self.cfg.ver.scons_ver()
         kw["TARGET_ARCH"] = self.cfg.arch.scons_arch()
         super().__init__(**kw)
@@ -478,6 +478,8 @@ class MsvcEnvironment(SConsEnvironment):
             lflags.append(f"/entry:{self.cfg.entry}")
         if self.cfg.stub:
             lflags.append(f"/stub:{self.cfg.stub}")
+        if ver >= 17:
+            lflags.append("/emittoolversioninfo:no")
         if verbose:
             #lflags.extend(["/verbose", "/test"])
             lflags.extend(["/test"])
