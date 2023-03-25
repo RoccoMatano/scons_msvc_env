@@ -466,6 +466,9 @@ class MsvcEnvironment(SConsEnvironment):
             cflags.extend(
                 ["/permissive-", "/diagnostics:caret", "/Zc:__cplusplus"]
                 )
+        if ver >= 17:
+            cflags.append("/Zc:preprocessor")
+
         if verbose:
             cflags.append("/Bd")
 
