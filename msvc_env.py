@@ -206,6 +206,10 @@ class MsvcEnvironment(SConsEnvironment):
 
         # now we are going to adapt SCons' MSVC support
 
+        # set CCVERSION
+        tc = msvc_tools.ToolChain(self.cfg.arch, self["ENV"])
+        self["CCVERSION"] = tc.get_cl_ver()
+
         # initially no pch
         self.pch = ""
 
