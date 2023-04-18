@@ -170,7 +170,7 @@ def get_msvc_env(ver, arch, ignore_cache):
     if not key in _env_cache:
         _env_cache[key] = _setup_tool_env(ver.value, arch.value)
         try:
-            with open(ENV_CACHE_FILE, "w") as jfile:
+            with open(ENV_CACHE_FILE, "w", newline="\n") as jfile:
                 json.dump(_env_cache, jfile, indent=4)
         except OSError:
             pass
