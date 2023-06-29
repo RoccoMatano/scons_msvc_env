@@ -276,6 +276,12 @@ class MsvcEnvironment(SConsEnvironment):
             action=Action(self._mc_action, None),
             )
 
+        # add a builder for squabbing executables
+        self["BUILDERS"]["Squab"] = self.Builder(
+            emitter=self._squab_emitter,
+            action=Action(self._squab_action, "squabbing $SOURCE")
+            )
+
         # do not leave running mspdbsrv behind
         atexit.register(self._cleanup)
 
@@ -660,5 +666,16 @@ class MsvcEnvironment(SConsEnvironment):
             args.append("-A")
         args.append(str(source[0]))
         subprocess.run(args, check=True, env=env["ENV"], shell=True)
+
+    ############################################################################
+
+    def _squab_emitter(self, target, source, env):
+        return [f"{s.abspath}.bak" for s in source], source
+
+    ############################################################################
+
+    def _squab_action(self, target, source, env):
+        for s in source:
+            subprocess.run(["squab", s.abspath])
 
 ################################################################################
