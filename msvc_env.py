@@ -632,6 +632,10 @@ class MsvcEnvironment(SConsEnvironment):
 
     ############################################################################
 
+    def ntdll_lib(self):
+        return self.ImpLibFromSystemDll('ntdll.lib', 'ntdll.dll')[0]
+
+    ############################################################################
     def _cpp_action(self, target, source, env):
         kwargs = {
             "check": True,
