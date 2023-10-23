@@ -636,6 +636,11 @@ class MsvcEnvironment(SConsEnvironment):
         return self.ImpLibFromSystemDll('ntdll.lib', 'ntdll.dll')[0]
 
     ############################################################################
+
+    def os_msvcrt_lib(self):
+        return self.ImpLibFromSystemDll('os_msvcrt.lib', 'msvcrt.dll')[0]
+
+    ############################################################################
     def _cpp_action(self, target, source, env):
         kwargs = {
             "check": True,
