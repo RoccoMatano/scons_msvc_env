@@ -44,6 +44,7 @@ import os
 import re
 import copy
 import atexit
+import inspect
 import logging
 import pathlib
 import subprocess
@@ -376,6 +377,14 @@ class MsvcEnvironment(SConsEnvironment):
         self.VariantDir(build_path, sdir, False)
         self.fs.chdir(build_path, False)
         return build_path
+
+    ############################################################################
+
+    def install_relative_to_parent_dir(self, rel_path, source):
+        caller = pathlib.Path(inspect.stack()[1].filename)
+        dest = caller.parent.parent / rel_path
+        inst = self.Install(str(dest), source)
+        self.Default(inst)
 
     ############################################################################
 
