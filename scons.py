@@ -4,7 +4,7 @@ import pathlib
 
 ################################################################################
 
-VER = "4.5.2"
+VER = "4.6.0"
 SCONS_DIR = f"scons-{VER}/scons-local-{VER}"
 BASES = ["c:/prj/progs", "c:/projects"]
 SCONS_PROSPECTS = [pathlib.Path(b) / SCONS_DIR for b in BASES]
