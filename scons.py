@@ -15,7 +15,7 @@ def prepare_args():
     # replace implicit build script 'SConstruct' with 'sconstruct.py'
     # but only if pure SCons help was not requested
     args = sys.argv[1:]
-    if not "-H" in args:
+    if "-H" not in args:
         def build_script_in_args(args):
             for arg in args:
                 if arg == "-f":
@@ -35,7 +35,7 @@ def prepare_search_path():
             libs = [str(prospect)]
             break
     else:
-        raise EnvironmentError("cannot find SCons directory")
+        raise OSError("cannot find SCons directory")
     if "SCONS_LIB_DIR" in os.environ:
         libs.insert(0, os.environ["SCONS_LIB_DIR"])
     sys.path = libs + sys.path

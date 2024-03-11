@@ -80,9 +80,9 @@ class Ver(enum.IntEnum):
 
 class Arch(enum.Enum):
     X86   = "x86"
-    I386  = "x86"
+    I386  = "x86"   # noqa : PIE796
     X64   = "x64"
-    AMD64 = "x64"
+    AMD64 = "x64"   # noqa : PIE796
 
     def is_x86(self):
         return self.value == self.X86.value
@@ -155,7 +155,7 @@ ENV_CACHE_FILE = pathlib.Path(__file__).parent.resolve() / "msvc_env_cache.json"
 _env_cache = {}
 
 try:
-    with open(ENV_CACHE_FILE, "r") as jfile:
+    with open(ENV_CACHE_FILE) as jfile:
         _env_cache = json.load(jfile)
 except OSError:
     pass
@@ -165,9 +165,8 @@ except OSError:
 def get_msvc_env(ver, arch, ignore_cache):
     if ignore_cache:
         return _setup_tool_env(ver.value, arch.value)
-    global _env_cache
     key = f"vc{ver.value}_{arch.value}"
-    if not key in _env_cache:
+    if key not in _env_cache:
         _env_cache[key] = _setup_tool_env(ver.value, arch.value)
         try:
             with open(ENV_CACHE_FILE, "w", newline="\n") as jfile:
@@ -178,7 +177,7 @@ def get_msvc_env(ver, arch, ignore_cache):
 
 
 def reset_env_cache():
-    global _env_cache
+    global _env_cache # noqa : PLW0603
     _env_cache = {}
 
 ################################################################################
@@ -204,17 +203,19 @@ class ToolChain:
             kwargs["stdout"] = PIPE
         if capture_err:
             kwargs["stderr"] = STDOUT if capture_out else PIPE
-        proc = run(args, **kwargs)
+        proc = run(args, **kwargs) # noqa : PLW1510
         output = proc.stdout if capture_out else proc.stderr
-        if output is not None:
-            return output.decode("ascii", errors="backslashreplace")
+        return (
+            None if output is None else
+            output.decode("ascii", errors="backslashreplace")
+            )
 
     def get_cl_ver(self):
         out = self._run(["cl"], True, True)
         m = re.search(r"\s+(\d+(?:\.\d+)+)\s+", out)
         if not m:
             raise ValueError(f"version string not found:\n{out}")
-        return tuple(map(int, m.group(1).split('.')))
+        return tuple(map(int, m.group(1).split(".")))
 
     def lib(self, args):
         res_args = ["lib"]

@@ -46,7 +46,8 @@ import pathlib
 #  - To be able to attain the required decorated names, symbol information (pdb)
 #    for the DLL in question has to be available.
 #  - When creating the .def file, the output of dumpbin has to be transformed,
-#    so that the .def file contains the exported names in the correct decoration.
+#    so that the .def file contains the exported names in the correct
+#    decoration.
 #  - Even if the .def file contains the correct decorations, the lib tool will
 #    not mark the entries in the .lib file with the correct decoration flags.
 #    That has to be done manually in a post processing step.
@@ -262,7 +263,7 @@ def get_exports(filename, tool_chain):
 
 def def_from_dll(def_name, dll_name, tool_chain):
     exports = get_exports(dll_name, tool_chain)
-    with open(def_name, "wt") as d:
+    with open(def_name, "w") as d:
         d.write(f"LIBRARY {pathlib.Path(dll_name).stem}\nEXPORTS\n")
         for e in exports:
             d.write(f"    {e}\n")
@@ -287,7 +288,7 @@ def lib_from_dll(lib_name, dll_name, tool_chain):
 ################################################################################
 
 def lib_from_system_dll(lib_path, dll_name, tool_chain, prefix=""):
-    windir = pathlib.Path(os.environ["windir"])
+    windir = pathlib.Path(os.environ["WINDIR"])
     dll = windir / "system32" / dll_name
     if tool_chain.arch.is_x86():
         env_arch = os.environ["PROCESSOR_ARCHITECTURE"].lower()
@@ -302,13 +303,13 @@ def lib_from_system_dll(lib_path, dll_name, tool_chain, prefix=""):
 
 if __name__ == "__main__":
 
-    from msvc_tools import ToolChain, Arch, DEFAULT_VER
+    from msvc_tools import ToolChain, Arch
 
     dll_name = pathlib.Path(sys.argv[1])
     if len(sys.argv) > 2:
         lib_name = pathlib.Path(sys.argv[2])
     else:
-        lib_name = pathlib.Path(".") / (dll_name.stem + ".lib")
+        lib_name = pathlib.Path() / (dll_name.stem + ".lib")
 
     arch = Arch.X86 if is_x86_binary(dll_name) else Arch.X64
     lib_from_dll(lib_name, dll_name, ToolChain.default(arch))

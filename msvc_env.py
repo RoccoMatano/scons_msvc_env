@@ -47,6 +47,7 @@ import atexit
 import inspect
 import logging
 import pathlib
+import contextlib
 import subprocess
 import dataclasses
 import msvc_tools
@@ -104,6 +105,8 @@ class BuildCfg:
         # 'dataclasses.replace' is not enough and we have to do a deep copy
         return copy.deepcopy(self)
 
+DEFAULT_BLD_CFG = BuildCfg()
+
 ################################################################################
 
 # options can only be added once
@@ -111,11 +114,11 @@ _options_have_been_added = False
 
 def _parse_options(cfg):
     if cfg.parse_opt:
-        global _options_have_been_added
+        global _options_have_been_added # noqa : PLW0603
         if not _options_have_been_added:
             _options_have_been_added = True
-            verset = set(v.value for v in Ver.__members__.values())
-            archset = set(v.value for v in Arch.__members__.values())
+            verset = {v.value for v in Ver.__members__.values()}
+            archset = {v.value for v in Arch.__members__.values()}
             AddOption = SCons.Script.AddOption
             AddOption("--vc", help=f"vc ver {verset}")
             AddOption("--arch", help=f"target arch {archset}")
@@ -165,7 +168,7 @@ def _parse_options(cfg):
         if GetOption("verbose"):
             cfg.verbose = True
             logging.basicConfig(level=logging.DEBUG)
-            logging.info(f"\n\nactivated logging\n\n")
+            logging.info("\n\nactivated logging\n\n")
 
         prefix = GetOption("prefix")
         if prefix:
@@ -175,7 +178,7 @@ def _parse_options(cfg):
 
 class MsvcEnvironment(SConsEnvironment):
 
-    def __init__(self, cfg=BuildCfg(), **kw):
+    def __init__(self, cfg=DEFAULT_BLD_CFG, **kw):
         # ensure to request msvc tools
         tools = kw.get("tools", [])
         for tool in ("msvc", "mslib", "mslink"):
@@ -295,12 +298,17 @@ class MsvcEnvironment(SConsEnvironment):
             "env": self["ENV"],
             "shell": True,
             }
-        subprocess.run(["mspdbsrv", "-stop"], **kwargs)
+        subprocess.run(["mspdbsrv", "-stop"], **kwargs) # noqa : PLW1510
 
     ############################################################################
 
-    def Clone(self, tools=[], toolpath=None, parse_flags=None, **kw):
-        clone = super().Clone(tools, toolpath, parse_flags, **kw)
+    def Clone(self, tools=None, toolpath=None, parse_flags=None, **kw):
+        clone = super().Clone(
+            [] if tools is None else tools,
+            toolpath,
+            parse_flags,
+            **kw
+            )
         clone.cfg = self.cfg.copy()
         clone._orig_output_gen = self._orig_output_gen
         clone.pch = self.pch[:]
@@ -310,10 +318,8 @@ class MsvcEnvironment(SConsEnvironment):
 
     def CloneNoGL(self):
         clone = self.Clone()
-        try:
+        with contextlib.suppress(ValueError):
             clone["CCFLAGS"].remove("/GL")
-        except ValueError:
-            pass
         return clone
 
     ############################################################################
@@ -431,10 +437,12 @@ class MsvcEnvironment(SConsEnvironment):
         flags = []
         if self.cfg.pdb:
             flags.append(f"/pdb:{target[0].attributes.pdb}")
-            flags.append("/debug" if self.cfg.ver == VC9 else "/debug:full")
+            flags.append(
+                "/debug" if self.cfg.ver == VC9 else "/debug:full" # noqa : F821
+                )
         if self.get("MAPFILE", None):
-            flags.append(f"/map:{self.with_suffix(target[0], '.map')}")
-        if self.get("ASMLST", None) and self.cfg.ver > VC6:
+            flags.append(f"/map:{self.with_suffix(target[0], ".map")}")
+        if self.get("ASMLST", None) and self.cfg.ver > VC6: # noqa : F821
             flags.append("/ltcgasmlist")
         return flags or None
 
@@ -540,10 +548,10 @@ class MsvcEnvironment(SConsEnvironment):
             # squab can discard them (the linker doesn't let you merge .xdata
             # directly into .pdata)
             vanish = [
-                '/section:.vanish,R',
-                '/merge:.xdata=.vanish',
-                '/merge:.pdata=.vanish',
-                '/ignore:4253',
+                "/section:.vanish,R",
+                "/merge:.xdata=.vanish",
+                "/merge:.pdata=.vanish",
+                "/ignore:4253",
                 ]
             ladd.extend(vanish)
         lflags.extend(ladd)
@@ -561,7 +569,7 @@ class MsvcEnvironment(SConsEnvironment):
 
     def get_not_optimized_flags(self):
         cflags, lflags = self._get_common_flags()
-        cflags.extend(["/Od",])
+        cflags.extend(["/Od"])
         return cflags, lflags
 
     ############################################################################
@@ -626,7 +634,7 @@ class MsvcEnvironment(SConsEnvironment):
             wow = os.environ.get("PROCESSOR_ARCHITEW6432", "")
             if env_arch != "x86" or wow:
                 subdir = "syswow64"
-        sysdir = self.Dir(subdir, os.environ["windir"])
+        sysdir = self.Dir(subdir, os.environ["WINDIR"])
         source[0] = self.File(source[0].name, sysdir)
 
         for suffix in (".def", ".exp"):
@@ -642,12 +650,12 @@ class MsvcEnvironment(SConsEnvironment):
     ############################################################################
 
     def ntdll_lib(self):
-        return self.ImpLibFromSystemDll('ntdll.lib', 'ntdll.dll')[0]
+        return self.ImpLibFromSystemDll("ntdll.lib", "ntdll.dll")[0]
 
     ############################################################################
 
     def os_msvcrt_lib(self):
-        return self.ImpLibFromSystemDll('os_msvcrt.lib', 'msvcrt.dll')[0]
+        return self.ImpLibFromSystemDll("os_msvcrt.lib", "msvcrt.dll")[0]
 
     ############################################################################
     def _cpp_action(self, target, source, env):
@@ -661,8 +669,8 @@ class MsvcEnvironment(SConsEnvironment):
         plainc = source[0].suffix in (".c", ".C")
         com = env["CCCOM"] if plainc else env["CXXCOM"]
         com = env.subst(com.replace("/c", "/E"), target=target, source=source)
-        res = subprocess.run(com, **kwargs).stdout
-        with open(str(target[0]), "wt") as pp:
+        res = subprocess.run(com, **kwargs).stdout # noqa : PLW1510
+        with open(str(target[0]), "w") as pp:
             pp.write(res)
 
     ############################################################################
@@ -694,6 +702,6 @@ class MsvcEnvironment(SConsEnvironment):
 
     def _squab_action(self, target, source, env):
         for s in source:
-            subprocess.run(["squab", s.abspath])
+            subprocess.run(["squab", s.abspath], check=True)
 
 ################################################################################
