@@ -1,6 +1,6 @@
 ################################################################################
 #
-# Copyright 2020-2023 Rocco Matano
+# Copyright 2020-2024 Rocco Matano
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -80,9 +80,9 @@ class Ver(enum.IntEnum):
 
 class Arch(enum.Enum):
     X86   = "x86"
-    I386  = "x86"   # noqa : PIE796
+    I386  = "x86" # noqa: PIE796
     X64   = "x64"
-    AMD64 = "x64"   # noqa : PIE796
+    AMD64 = "x64" # noqa: PIE796
 
     def is_x86(self):
         return self.value == self.X86.value
@@ -151,11 +151,11 @@ def _setup_tool_env(ver, arch):
 
 ################################################################################
 
-ENV_CACHE_FILE = pathlib.Path(__file__).parent.resolve() / "msvc_env_cache.json"
+ENV_CACHE_FILE = pathlib.Path("~/.msvc_env_cache.json").expanduser()
 _env_cache = {}
 
 try:
-    with open(ENV_CACHE_FILE) as jfile:
+    with open(ENV_CACHE_FILE, "rt") as jfile:
         _env_cache = json.load(jfile)
 except OSError:
     pass
@@ -169,7 +169,7 @@ def get_msvc_env(ver, arch, ignore_cache):
     if key not in _env_cache:
         _env_cache[key] = _setup_tool_env(ver.value, arch.value)
         try:
-            with open(ENV_CACHE_FILE, "w", newline="\n") as jfile:
+            with open(ENV_CACHE_FILE, "wt", newline="\n") as jfile:
                 json.dump(_env_cache, jfile, indent=4)
         except OSError:
             pass
@@ -177,8 +177,7 @@ def get_msvc_env(ver, arch, ignore_cache):
 
 
 def reset_env_cache():
-    global _env_cache # noqa : PLW0603
-    _env_cache = {}
+    _env_cache.clear()
 
 ################################################################################
 
@@ -203,12 +202,11 @@ class ToolChain:
             kwargs["stdout"] = PIPE
         if capture_err:
             kwargs["stderr"] = STDOUT if capture_out else PIPE
-        proc = run(args, **kwargs) # noqa : PLW1510
+        proc = run(args, **kwargs)
         output = proc.stdout if capture_out else proc.stderr
-        return (
-            None if output is None else
-            output.decode("ascii", errors="backslashreplace")
-            )
+        if output is not None:
+            return output.decode("ascii", errors="backslashreplace")
+        return None
 
     def get_cl_ver(self):
         out = self._run(["cl"], True, True)

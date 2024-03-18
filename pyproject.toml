@@ -1,3 +1,44 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scons_msvc_env"
+description = "A wicked way to use MSVC in conjunction with SCons"
+authors = [{name = "Rocco Matano"}]
+requires-python = ">=3.8"
+license = {text = "MIT License"}
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Build Tools",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    ]
+dynamic = ["version", "readme"]
+dependencies = [
+    'SCons >= 4.0.0',
+    ]
+
+[project.urls]
+homepage = "https://github.com/RoccoMatano/scons_msvc_env"
+
+################################################################################
+
+[tool.setuptools]
+packages = ["scons_msvc_env"]
+include-package-data = true
+
+[tool.setuptools.dynamic]
+version = {attr = "scons_msvc_env.__version__"}
+readme = {file = ["README.md"], content-type = "text/markdown"}
+
+################################################################################
+
 [tool.ruff]
 target-version = "py38"
 line-length = 80
@@ -27,13 +68,18 @@ select = [
     ]
 ignore = [
     "COM812",   # Trailing comma missing
+    "COM819",   # prohibited-trailing-comma
     "ISC003",   # Explicitly concatenated string should be implicitly concatenated
+    "PLW1510",  # `subprocess.run` without explicit `check` argument
     "PTH123",   # open() should be replaced by Path.open()
     "RSE102",   # Unnecessary parentheses on raised exception
     "RET505",   # Unnecessary {branch} after return statement
     "RET508",   # Unnecessary {branch} after break statement
     "SIM102",   # Use a single if statement instead of nested if statements
     "SIM117",   # Use a single instead of nested `with` statements
+    "UP015",    # redundant-open-modes
     "UP039",    # unnecessary-class-parentheses
     "RUF013",   # implicit-optional -> no f..g typing!!!
     ]
+
+################################################################################

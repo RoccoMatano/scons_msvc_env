@@ -1,6 +1,6 @@
 ################################################################################
 #
-# Copyright 2016-2023 Rocco Matano
+# Copyright 2016-2024 Rocco Matano
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -263,7 +263,7 @@ def get_exports(filename, tool_chain):
 
 def def_from_dll(def_name, dll_name, tool_chain):
     exports = get_exports(dll_name, tool_chain)
-    with open(def_name, "w") as d:
+    with open(def_name, "wt") as d:
         d.write(f"LIBRARY {pathlib.Path(dll_name).stem}\nEXPORTS\n")
         for e in exports:
             d.write(f"    {e}\n")
@@ -303,7 +303,7 @@ def lib_from_system_dll(lib_path, dll_name, tool_chain, prefix=""):
 
 if __name__ == "__main__":
 
-    from msvc_tools import ToolChain, Arch
+    from .msvc_tools import ToolChain, Arch
 
     dll_name = pathlib.Path(sys.argv[1])
     if len(sys.argv) > 2:
