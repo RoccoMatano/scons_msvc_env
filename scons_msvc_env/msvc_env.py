@@ -44,7 +44,6 @@ import os
 import re
 import copy
 import atexit
-import inspect
 import logging
 import pathlib
 import contextlib
@@ -54,11 +53,11 @@ from . import msvc_tools
 from .msvc_tools import Arch, Ver, DEFAULT_ARCH, DEFAULT_VER
 from . import implib_from_dll
 import SCons
+import SCons.Defaults
 # While SCons.Script has a sub-module called 'SConscript' it also defines an
 # attribute of the same name. So we have to use 'SConscript' in an import
 # statement to get hold of the sub-module.
 from SCons.Script.SConscript import SConsEnvironment
-import SCons.Defaults
 
 ################################################################################
 
@@ -112,7 +111,7 @@ class _NeedInit:
     def __init__(self):
         self._init_done = False
 
-    def __call__(self):
+    def __bool__(self):
         result = not self._init_done
         if result:
             self._init_done = True
@@ -123,63 +122,60 @@ class _NeedInit:
 # options can only be added once
 _options_have_to_be_added = _NeedInit()
 
+def _add_options():
+    if not _options_have_to_be_added:
+        return
+    verset = {v.value for v in Ver.__members__.values()}
+    archset = {v.value for v in Arch.__members__.values()}
+    add = SCons.Script.AddOption
+    add("--vc", help=f"vc ver {verset}")
+    add("--arch", help=f"target arch {archset}")
+    add("--def", help="cpp defines: n1[=v1][$n2[=v2]]")
+    add("--nop", action="store_true", help="no optimization")
+    add("--pdb", action="store_true", help="create PDB")
+    add("--nomap", action="store_true", help="no map file")
+    add("--noasm", action="store_true", help="no asm listings")
+    add("--verbose", action="store_true", help="be verbose")
+    add("--prefix", help="build path pefix")
+    add("--nocache", action="store_true", help="ignore cached environments")
+    add("--noltcg", action="store_true", help="no link time code generation")
+
+################################################################################
+
 def _parse_options(cfg):
     if cfg.parse_opt:
-        if _options_have_to_be_added():
-            verset = {v.value for v in Ver.__members__.values()}
-            archset = {v.value for v in Arch.__members__.values()}
-            AddOption = SCons.Script.AddOption
-            AddOption("--vc", help=f"vc ver {verset}")
-            AddOption("--arch", help=f"target arch {archset}")
-            AddOption("--def", help="cpp defines: n1[=v1][$n2[=v2]]")
-            AddOption("--nop", action="store_true", help="no optimization")
-            AddOption("--pdb", action="store_true", help="create PDB")
-            AddOption("--nomap", action="store_true", help="no map file")
-            AddOption("--noasm", action="store_true", help="no asm listings")
-            AddOption("--verbose", action="store_true", help="be verbose")
-            AddOption("--prefix", help="build path pefix")
-            AddOption(
-                "--nocache",
-                action="store_true",
-                help="ignore cached msvc environments"
-                )
-            AddOption(
-                "--noltcg",
-                action="store_true",
-                help="no link time code generation"
-                )
-
-        GetOption = SCons.Script.GetOption
-        ver = GetOption("vc")
+        _add_options()
+        get_opt = SCons.Script.GetOption
+        ver = get_opt("vc")
         if ver:
             cfg.ver = Ver(float(ver))
-        arch = GetOption("arch")
+        arch = get_opt("arch")
         if arch:
             cfg.arch = Arch[arch.upper()]
-        defines = GetOption("def")
+        defines = get_opt("def")
         if defines:
             for d in defines.split("$"):
                 nv = d.split("=")
                 name, value = nv if len(nv) > 1 else (nv[0], None)
                 cfg.defines[name] = value
-        if GetOption("nop"):
+        if get_opt("nop"):
             cfg.nop = cfg.pdb = True
-        if GetOption("pdb"):
+        if get_opt("pdb"):
             cfg.pdb = True
-        if GetOption("nomap"):
+        if get_opt("nomap"):
             cfg.nomap = True
-        if GetOption("noasm"):
+        if get_opt("noasm"):
             cfg.noasm = True
-        if GetOption("nocache"):
+        if get_opt("nocache"):
             cfg.nocache = True
-        if GetOption("noltcg"):
+        if get_opt("noltcg"):
             cfg.noltcg = True
-        if GetOption("verbose"):
+        if get_opt("verbose"):
             cfg.verbose = True
             logging.basicConfig(level=logging.DEBUG)
             logging.info("\n\nactivated logging\n\n")
 
-        prefix = GetOption("prefix")
+        prefix = get_opt("prefix")
         if prefix:
             cfg.prefix = prefix
 
@@ -396,9 +392,8 @@ class MsvcEnvironment(SConsEnvironment):
     ############################################################################
 
     def install_relative_to_parent_dir(self, rel_path, source):
-        caller = pathlib.Path(inspect.stack()[1].filename)
-        dest = caller.parent.parent / rel_path
-        inst = self.Install(str(dest), source)
+        dest = self.Dir(f"#/../{rel_path}").abspath
+        inst = self.Install(dest, source)
         self.Default(inst)
 
     ############################################################################
