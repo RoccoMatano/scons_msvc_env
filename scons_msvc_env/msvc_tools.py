@@ -60,12 +60,13 @@ class Ver(enum.IntEnum):
 
     def scons_ver(self):
         lut = {
-            # HACK!: Old msvc versions did not require that the pch object was
-            #        was given to the linker as an input, but newer version
-            #        need this (else error LNK2011). SCons thinks that version
-            #        11.0 is the first that requres this, but that is WRONG!
-            #        Version 9.0 already needs it. So we tell SCons that it
-            #        should handle 9.0 like 11.0.
+            # workaround for Scons bug:
+            # Old msvc versions did not require that the pch object was
+            # was given to the linker as an input, but newer version
+            # need this (else error LNK2011). SCons thinks that version
+            # 11.0 is the first that requres this, but that is WRONG!
+            # Version 9.0 already needs it. So we tell SCons that it
+            # should handle 9.0 like 11.0.
              6: "6.0",
              9: "11.0",
             11: "11.0",
