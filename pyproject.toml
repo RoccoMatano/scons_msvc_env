@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -21,9 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     ]
 dynamic = ["version", "readme"]
-dependencies = [
-    'SCons >= 4.0.0',
-    ]
+dependencies = ["SCons >= 4.0.0"]
 
 [project.urls]
 homepage = "https://github.com/RoccoMatano/scons_msvc_env"
