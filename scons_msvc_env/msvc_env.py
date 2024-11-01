@@ -109,7 +109,17 @@ class BuildCfg:
 
 # options can only be added once
 
-def _add_options_func():
+def _run_once(func):
+    def wrapper(*args, **kwargs):
+        if not wrapper.has_run:
+            wrapper.has_run = True
+            return func(*args, **kwargs)
+        return None
+    wrapper.has_run = False
+    return wrapper
+
+@_run_once
+def _add_options():
     verset = {v.value for v in Ver.__members__.values()}
     archset = {v.value for v in Arch.__members__.values()}
     add = SCons.Script.AddOption
@@ -124,21 +134,6 @@ def _add_options_func():
     add("--prefix", help="build path pefix")
     add("--nocache", action="store_true", help="ignore cached environments")
     add("--noltcg", action="store_true", help="no link time code generation")
-
-class RunOnce:
-    def __init__(self, func, *args, **kwargs):
-        self._call_done = False
-        self._func = func
-        self._args = args
-        self._kwargs = kwargs
-
-    def __call__(self):
-        if not self._call_done:
-            self._call_done = True
-            return self._func(*self._args, **self._kwargs)
-        return None
-
-_add_options = RunOnce(_add_options_func)
 
 ################################################################################
 
