@@ -1,6 +1,6 @@
 ################################################################################
 #
-# Copyright 2020-2024 Rocco Matano
+# Copyright 2020-2025 Rocco Matano
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -43,7 +43,6 @@ Additional features compared to standard SCons:
 
 import os
 import re
-import copy
 import atexit
 import logging
 import pathlib
@@ -101,9 +100,9 @@ class BuildCfg:
     noltcg: bool = False
 
     def copy(self):
-        # since 'defines' is a mutable container, a simple 'copy' or even a
-        # 'dataclasses.replace' is not enough and we have to do a deep copy
-        return copy.deepcopy(self)
+        # since 'defines' is a mutable container, a simple 'copy.copy(self)'
+        # is not enough and 'copy.deepcopy(self)' seems to be too heavy-weight
+        return dataclasses.replace(self, defines=self.defines.copy())
 
 ################################################################################
 
@@ -242,10 +241,9 @@ class MsvcEnvironment(SConsEnvironment):
 
         # extending emitter for map files
         for ename in ("PROGEMITTER", "SHLIBEMITTER"):
-            elist = self[ename]
-            elist.insert(0, self._pdb_emitter)
-            elist.append(self._map_emitter)
-            self[ename] = elist
+            self[ename].insert(0, self._pdb_emitter)
+            self[ename].append(self._map_emitter)
+        self["SHLIBEMITTER"].append(self._dll_pdb_sorter)
 
         # add support for assembler listings
 
@@ -326,6 +324,11 @@ class MsvcEnvironment(SConsEnvironment):
 
     def no_gl_object(self, src):
         return self.CloneNoGL().Object(source=src)
+
+    ############################################################################
+
+    def sqaub_applicable(self):
+        return self.cfg.arch == Arch.X64 and not self.cfg.pdb
 
     ############################################################################
 
@@ -440,7 +443,7 @@ class MsvcEnvironment(SConsEnvironment):
                 "/debug" if self.cfg.ver == Ver.VC9 else "/debug:full"
                 )
         if self.get("MAPFILE", None):
-            flags.append(f"/map:{self.with_suffix(target[0], ".map")}")
+            flags.append(f"/map:{self.with_suffix(target[0], '.map')}")
         if self.get("ASMLST", None) and self.cfg.ver > Ver.VC6:
             flags.append("/ltcgasmlist")
         return flags or None
@@ -460,6 +463,12 @@ class MsvcEnvironment(SConsEnvironment):
     def _pdb_emitter(self, target, source, env):
         if self.cfg.pdb:
             env["PDB"] = self.with_suffix(target[0], ".pdb").name
+        return target, source
+
+    def _dll_pdb_sorter(self, target, source, env):
+        if self.cfg.pdb:
+            if len(target) > 1 and target[1].suffix == ".pdb":
+                target = [target[0], *target[2:], target[1]]
         return target, source
 
     ############################################################################
