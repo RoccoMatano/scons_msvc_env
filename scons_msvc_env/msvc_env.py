@@ -355,7 +355,9 @@ class MsvcEnvironment(SConsEnvironment):
         if impl is None:
             impl = name.rsplit(".", 1)[0] + impl_ext
         self["PCHSTOP"] = name
-        self["PCH"] = self.PCH(impl)[0]
+        pch, obj = self.PCH(impl)
+        self["PCH"] = pch
+        return [obj]
 
     ############################################################################
 
