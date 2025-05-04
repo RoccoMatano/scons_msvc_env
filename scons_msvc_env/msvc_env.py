@@ -398,6 +398,13 @@ class MsvcEnvironment(SConsEnvironment):
 
     ############################################################################
 
+    def cpp_defines_as_dict(self):
+        def def2tpl(defines):
+            for e in defines:
+                yield (e[0], e[1]) if isinstance(e, tuple) else (e, None)
+        return dict(def2tpl(self["CPPDEFINES"]))
+
+    ############################################################################
     def _builder_append_emitter(self, name, add_emitter):
         prev_bld = self["BUILDERS"][name]
         self["BUILDERS"][name] = self.Builder(
