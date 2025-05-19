@@ -7,9 +7,8 @@ name = "scons_msvc_env"
 description = "A wicked way to use MSVC in conjunction with SCons"
 authors = [{name = "Rocco Matano"}]
 requires-python = ">=3.8"
-license = {text = "MIT License"}
+license = "MIT"
 classifiers = [
-    "License :: OSI Approved :: MIT License",
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Build Tools",
     "Programming Language :: Python",
