@@ -405,6 +405,7 @@ class MsvcEnvironment(SConsEnvironment):
         return dict(def2tpl(self["CPPDEFINES"]))
 
     ############################################################################
+
     def _builder_append_emitter(self, name, add_emitter):
         prev_bld = self["BUILDERS"][name]
         self["BUILDERS"][name] = self.Builder(
@@ -675,6 +676,7 @@ class MsvcEnvironment(SConsEnvironment):
         return self.ImpLibFromSystemDll("os_msvcrt.lib", "msvcrt.dll")[0]
 
     ############################################################################
+
     def _cpp_action(self, target, source, env):
         kwargs = {
             "check": True,

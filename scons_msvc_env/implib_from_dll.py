@@ -265,7 +265,7 @@ def def_from_dll(def_name, dll_name, tool_chain):
     exports = get_exports(dll_name, tool_chain)
     with open(def_name, "wt") as d:
         d.write(f"LIBRARY {pathlib.Path(dll_name).stem}\nEXPORTS\n")
-        for e in exports:
+        for e in exports: # noqa : FURB122
             d.write(f"    {e}\n")
         d.write("\n")
 
