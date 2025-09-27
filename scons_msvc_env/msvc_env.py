@@ -508,9 +508,12 @@ class MsvcEnvironment(SConsEnvironment):
             "/EHs-c-",
             ]
         if ver >= 16:
-            cflags.extend(
-                ["/permissive-", "/diagnostics:caret", "/Zc:__cplusplus"]
-                )
+            cflags.extend([
+                "/permissive-",
+                "/diagnostics:caret",
+                "/Zc:__cplusplus",
+                "/utf-8",
+                ])
         if ver >= 17:
             cflags.append("/Zc:preprocessor")
 
