@@ -57,6 +57,7 @@ class Ver(enum.IntEnum):
     VC15 = 15   # Visual Studio 2017, _MSC_VER 1910, MSVC 14.1
     VC16 = 16   # Visual Studio 2019, _MSC_VER 1920, MSVC 14.2
     VC17 = 17   # Visual Studio 2022, _MSC_VER 1930, MSVC 14.3
+    VC18 = 18   # Visual Studio 2026, _MSC_VER 1950, MSVC 14.5
 
     def scons_ver(self):
         lut = {
@@ -74,6 +75,7 @@ class Ver(enum.IntEnum):
             15: "14.1",
             16: "14.2",
             17: "14.3",
+            18: "14.5",
             }
         return lut[self.value]
 
@@ -84,6 +86,7 @@ class Arch(enum.Enum):
     I386  = "x86" # noqa: PIE796
     X64   = "x64"
     AMD64 = "x64" # noqa: PIE796
+    ARM64 = "arm64"
 
     def is_x86(self):
         return self.value == self.X86.value
@@ -91,8 +94,11 @@ class Arch(enum.Enum):
     def is_x64(self):
         return self.value == self.X64.value
 
+    def is_arm64(self):
+        return self.value == self.ARM64.value
+
     def scons_arch(self):
-        return "x86" if self.value == self.X86.value else "amd64"
+        return "amd64" if self.value == self.X64.value else self.value
 
 ################################################################################
 

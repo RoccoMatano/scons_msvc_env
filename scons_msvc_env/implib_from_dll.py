@@ -27,6 +27,7 @@ import os
 import re
 import ctypes
 import pathlib
+from scons_msvc_env.msvc_tools import ToolChain, Arch
 
 ################################################################################
 #
@@ -95,6 +96,8 @@ IMAGE_DOS_SIGNATURE = 0x5A4D      # MZ
 IMAGE_NT_SIGNATURE = 0x00004550   # PE00
 IMAGE_FILE_MACHINE_UNKNOWN = 0
 IMAGE_FILE_MACHINE_I386 = 0x014c
+IMAGE_FILE_MACHINE_AMD64 = 0x8664
+IMAGE_FILE_MACHINE_ARM64 = 0xAA64
 
 class IMAGE_DOS_HEADER(ctypes.Structure):
     _fields_ = (
@@ -108,7 +111,13 @@ class IMAGE_FILE_HEADER_Machine(ctypes.Structure):
 
 ################################################################################
 
-def is_x86_binary(filename):
+_arch_map = {
+    IMAGE_FILE_MACHINE_I386: Arch.X86,
+    IMAGE_FILE_MACHINE_AMD64 : Arch.X64,
+    IMAGE_FILE_MACHINE_ARM64 : Arch.ARM64,
+    }
+
+def arch_of_binary(filename):
     not_executable = ValueError("not an executable")
     with open(filename, "rb") as f:
         dta = f.read(ctypes.sizeof(IMAGE_DOS_HEADER))
@@ -121,7 +130,8 @@ def is_x86_binary(filename):
         ifhm = IMAGE_FILE_HEADER_Machine.from_buffer_copy(dta)
         if ifhm.signature != IMAGE_NT_SIGNATURE:
             raise not_executable
-        return ifhm.machine == IMAGE_FILE_MACHINE_I386
+        # let there be key errors in case of missing map entries!
+        return _arch_map[ifhm.machine]
 
 ################################################################################
 
@@ -225,13 +235,11 @@ def fix_x86_decorations_in_lib(lib_name):
 
 def decorate_x86_export(undec, dec):
     # stdcall
-    m = rx_stdcall86.match(dec)
-    if m:
+    if m := rx_stdcall86.match(dec):
         return undec + m.group(1)
 
     # fastcall
-    m = rx_fastcall.match(dec)
-    if m:
+    if m := rx_fastcall.match(dec):
         return "@" + undec + m.group(1)
 
     # anything else is left unchanged
@@ -303,15 +311,13 @@ def lib_from_system_dll(lib_path, dll_name, tool_chain, prefix=""):
 
 if __name__ == "__main__":
 
-    from .msvc_tools import ToolChain, Arch
-
     dll_name = pathlib.Path(sys.argv[1])
     if len(sys.argv) > 2:
         lib_name = pathlib.Path(sys.argv[2])
     else:
-        lib_name = pathlib.Path() / (dll_name.stem + ".lib")
+        lib_name = pathlib.Path() / dll_name.with_suffix(".lib")
 
-    arch = Arch.X86 if is_x86_binary(dll_name) else Arch.X64
-    lib_from_dll(lib_name, dll_name, ToolChain.default(arch))
+    tc = ToolChain.default(arch_of_binary(dll_name))
+    lib_from_dll(lib_name, dll_name, tc)
 
 ################################################################################
