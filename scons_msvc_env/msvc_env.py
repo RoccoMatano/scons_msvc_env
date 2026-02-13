@@ -271,6 +271,7 @@ class MsvcEnvironment(SConsEnvironment):
 
         # add a builder that preprocesses a source file
         self["BUILDERS"]["PreProcess"] = self.Builder(
+            emitter=self._cpp_emitter,
             action=Action(self._cpp_action, "Preprocessing $SOURCE"),
             suffix=".i"
             )
@@ -680,6 +681,19 @@ class MsvcEnvironment(SConsEnvironment):
 
     ############################################################################
 
+    def subst_str_list(self, to_expand, tgt, src):
+        sh_lst_lst = self.subst_list(to_expand, target=tgt, source=src)
+        if len(sh_lst_lst) != 1:
+            raise RuntimeError(f"Expected one list, got {len(sh_lst_lst)}")
+        return list(map(str, sh_lst_lst[0]))
+
+    ############################################################################
+
+    def _cpp_emitter(self, target, source, env):
+        return [self.with_suffix(src, ".i") for src in source], source
+
+    ############################################################################
+
     def _cpp_action(self, target, source, env):
         kwargs = {
             "check": True,
@@ -688,12 +702,15 @@ class MsvcEnvironment(SConsEnvironment):
             "stdout": subprocess.PIPE,
             "text": True
             }
-        plainc = source[0].suffix in (".c", ".C")
-        com = env["CCCOM"] if plainc else env["CXXCOM"]
-        com = env.subst(com.replace("/c", "/E"), target=target, source=source)
-        res = subprocess.run(com, **kwargs).stdout
-        with open(str(target[0]), "wt") as pp:
-            pp.write(res)
+        ccom = env["CCCOM"].replace("/c", "/E")
+        cxxcom = env["CXXCOM"].replace("/c", "/E")
+        # preprocessor can only take one source file at a time
+        for tgt, src in zip(target, source, strict=True):
+            com = ccom if src.suffix in (".c", ".C") else cxxcom
+            cmd = self.subst_str_list(com, tgt, src)
+            res = subprocess.run(cmd, **kwargs).stdout
+            with open(str(tgt), "wt") as pp:
+                pp.write(res)
 
     ############################################################################
 
