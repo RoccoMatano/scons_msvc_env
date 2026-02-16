@@ -388,6 +388,7 @@ class MsvcEnvironment(SConsEnvironment):
         build_path = self.get_target_dir(bdir)
         self.VariantDir(build_path, sdir, False)
         self.fs.chdir(build_path, False)
+        self.SConsignFile(self.File(build_path.name, build_path).abspath)
         return build_path
 
     ############################################################################
