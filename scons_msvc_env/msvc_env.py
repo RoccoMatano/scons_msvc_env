@@ -49,6 +49,7 @@ import pathlib
 import contextlib
 import subprocess
 import dataclasses
+import collections
 from . import msvc_tools
 from .msvc_tools import Arch, Ver, DEFAULT_ARCH, DEFAULT_VER
 from . import implib_from_dll
@@ -401,10 +402,38 @@ class MsvcEnvironment(SConsEnvironment):
     ############################################################################
 
     def cpp_defines_as_dict(self):
-        def def2tpl(defines):
-            for e in defines:
-                yield (e[0], e[1]) if isinstance(e, tuple) else (e, None)
-        return dict(def2tpl(self["CPPDEFINES"]))
+        def normalize_one(item):
+            if item is None:
+                return
+            if isinstance(item, (list, collections.deque)):
+                for sub in item:
+                    yield from normalize_one(sub)
+                return
+            if isinstance(item, dict):
+                yield from item.items()
+                return
+            if isinstance(item, str):
+                yield (item, None)
+                return
+            if isinstance(item, tuple):
+                if len(item) == 2:
+                    yield item
+                    return
+                raise ValueError(f"CPPDEFINES tuple length != 2: {item!r}")
+
+            # Anything else: try to coerce to string as a macro name
+            yield (str(item), None)
+
+        flat = []
+        for define in self["CPPDEFINES"]:
+            if isinstance(define, (list, collections.deque)):
+                for item in define:
+                    flat.extend(normalize_one(item))
+            else:
+                flat.extend(normalize_one(define))
+
+        # Collapse duplicates - last one wins
+        return {k: v for k, v in flat}
 
     ############################################################################
 
