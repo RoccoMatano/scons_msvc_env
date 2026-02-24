@@ -433,7 +433,7 @@ class MsvcEnvironment(SConsEnvironment):
                 flat.extend(normalize_one(define))
 
         # Collapse duplicates - last one wins
-        return {k: v for k, v in flat}
+        return dict(flat)
 
     ############################################################################
 

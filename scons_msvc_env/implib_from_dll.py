@@ -27,7 +27,10 @@ import os
 import re
 import ctypes
 import pathlib
-from scons_msvc_env.msvc_tools import ToolChain, Arch
+if __package__:
+    from scons_msvc_env.msvc_tools import ToolChain, Arch
+else:
+    from msvc_tools import ToolChain, Arch
 
 ################################################################################
 #
